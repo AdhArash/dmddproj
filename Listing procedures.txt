@@ -1,0 +1,88 @@
+--Seller: for posting/dropping a listing, make a deal
+
+SET SERVEROUTPUT ON;
+
+CREATE OR REPLACE PACKAGE LISTING_OPERATIONS
+AS 
+PROCEDURE ADD_LISTING(IS_PREMIUM char,BANNER varchar,DESCRIPT varchar2,doorNo number,state VARCHAR2,city VARCHAR2,street VARCHAR2,
+country VARCHAR2,ZIP_CODE number,RENT number,DEPOSIT number,BROKERAGE number,minArea number,maxArea number,HEAT char,HOT_WATER char,
+LAUNDRY char,DATE_AVAILABLE DATE,LEASE_ID number,aType VARCHAR,BEDS Number, BATHS number);
+PROCEDURE DELETE_LISTING(LISTING_ID NUMBER);
+PROCEDURE MAKE_DEAL(LISTING_ID NUMBER,OFFER_ID NUMBER);
+END LISTING_OPERATIONS;
+/
+
+CREATE OR REPLACE PACKAGE BODY LISTING_OPERATIONS
+AS
+PROCEDURE ADD_LISTING(IS_PREMIUM char,BANNER varchar,DESCRIPT varchar2,doorNo number,state VARCHAR2,city VARCHAR2,street VARCHAR2,
+country VARCHAR2,ZIP_CODE number,RENT number,DEPOSIT number, BROKERAGE number,minArea number,maxArea number,HEAT char,HOT_WATER char,
+LAUNDRY char,DATE_AVAILABLE DATE,LEASE_ID number,aType VARCHAR,BEDS Number, BATHS number)
+AS
+UID number;
+LID number;
+PID number;
+AID number;
+ad_ID number;
+BEGIN
+dbms_output.put_line(USER);
+select id into UID from users where email=USER;
+dbms_output.put_line(UID);
+EXECUTE IMMEDIATE 'Insert into ADDRESS (DOOR_NO, STATE_ID, CITY_ID, STREET_ID, COUNTRY_ID) values (doorno, (select id from STATE where name = state), (select id from CITY where name = city), (select id from STREET where name = street), (select id from COUNTRY where name = country))';
+select max(address.ID) into ad_ID from address;
+select ID into pid from PROPERTY_TYPE WHERE TYPE=aType AND BEDS = beds AND BATHS = baths;
+select ID into aid from AREA where MIN_AREA = minArea AND MAX_AREA = maxArea;
+Insert into LISTING (IS_PREMIUM,BANNER,DESCRIPT,ADDRESS_ID,ZIP_CODE,RENT,DEPOSIT,BROKERAGE,AREA_ID,HEAT,HOT_WATER,LAUNDRY,
+DATE_AVAILABLE,LEASE_ID,PROPERTY_TYPE_ID,DATE_POSTED,user_id) values (IS_PREMIUM,BANNER,DESCRIPT,ad_ID,ZIP_CODE,RENT,DEPOSIT,
+BROKERAGE,aid,HEAT,HOT_WATER,LAUNDRY,DATE_AVAILABLE,LEASE_ID,pid,sysdate,uid);
+select LISTING.ID into LID from Listing where lease_id=LEASE_ID;
+EXECUTE IMMEDIATE 'Insert into LISTING_STATUS(IS_AVAILABLE, DATE_UPDATED, UPDATED_BY, LISTING_ID) VALUES(''Y'', sysdate,UID, LID)';
+COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        dbms_output.put_line(SQLERRM);
+        dbms_output.put_line('Please provide the correct values according to the signature given in POSTER_ACTIONS..');
+        rollback;
+        raise;
+END ADD_LISTING;
+
+PROCEDURE DELETE_LISTING(LISTING_ID NUMBER)
+AS
+UID number;
+BEGIN
+dbms_output.put_line(USER);
+select id into UID from users where email=USER;
+dbms_output.put_line(UID);
+DELETE FROM LISTING WHERE LISTING.ID=LISTING_ID;
+DELETE FROM LISTING_STATUS WHERE LISTING_ID=LISTING_ID;
+--do we need to remove the related records from offer or make offer status inactive?
+COMMIT;
+EXCEPTION
+    WHEN OTHERS THEN
+        dbms_output.put_line(SQLERRM);
+        dbms_output.put_line('Please provide the correct values according to the signature given in POSTER_ACTIONS..');
+        rollback;
+        raise;
+END DELETE_LISTING;
+
+PROCEDURE MAKE_DEAL(LISTING_ID NUMBER, OFFER_ID NUMBER)
+AS
+UID NUMBER; 
+deal_cnt NUMBER;
+BEGIN
+dbms_output.put_line(USER);
+select users.id into UID from users where email=USER;
+dbms_output.put_line(UID);
+select count(*) into deal_cnt from offer where offer.listing_id=listing_id and offer.deal = 1; -- 5 records
+if(deal_cnt != 0) then
+UPDATE OFFER SET DEAL=1 WHERE offer.ID=OFFER_ID;
+UPDATE OFFER SET STATUS='N' WHERE offer.LISTING_ID=LISTING_ID AND offer.ID <> OFFER_ID;
+UPDATE LISTING_STATUS SET IS_AVAILABLE='N' WHERE listing_status.ID=LISTING_ID;
+else 
+ dbms_output.put_line('A DEAL IS ALREADY DONE FOR THIS LISTING!');
+end if;
+END MAKE_DEAL;
+END LISTING_OPERATIONS;
+/
+
+GRANT EXECUTE ON LISTING_OPERATIONS TO POSTER_INFO6210;
+
